@@ -65,6 +65,11 @@ class CatchEnv():
     def state_shape(self):
         return (self.fps,) + self.output_shape
 
+# define DNN class TODO
+# should contain 2 NN with same architecture
+
+# define replay class TODO
+# Create a buffer to store experience tuples of (state, action, reward, next_state, done).
 
 def run_environment():
     env = CatchEnv()
@@ -76,12 +81,24 @@ def run_environment():
         state, reward, terminal = env.step(1) 
 
         while not terminal:
-            state, reward, terminal = env.step(random.randint(0,2))
+            state, reward, terminal = env.step(choose_action())
             print("Reward obtained by the agent: {}".format(reward))
             state = np.squeeze(state)
 
         print("End of the episode")
-            
+
+def choose_action():
+    # TODO: Implement
+    return random.randint(0,2)
+
+def training(): 
+    # TODO
+    # For each episode, initialize the state and play the game by selecting actions according to the epsilon-greedy policy. 
+    # Store the experience tuple in the replay buffer and sample a batch of experiences from the buffer. 
+    # Compute the target Q-values using the target network and update the Q-network using the loss function.
+
+    # Update the target network: Every n episodes, update the target network by copying the weights from the Q-network.
 
 if __name__ == "__main__":
+    # Initialize hyperparameters: Set the learning rate, discount factor, exploration rate, batch size, and other hyperparameters.
     run_environment()
