@@ -1,8 +1,24 @@
 from skimage.transform import resize
 import random
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+#TODO Adjust values
+LEARNING_RATE = 0.01
+DISCOUNT_FACTOR = 0.01
+EXPLORATION_RATE = 0.1
+BATCH_SIZE = 32
+NUMBER_OF_EPOCHS = 1000
+INPUT_NODES = 1 # image as input
+HIDDEN_NODES = 10
+OUTPUT_NODES = 3 # three actions: left, right, neither
+MAX_CAPACITY = 256
 
 class CatchEnv():
+    '''Class implemented by course'''
+
     def __init__(self):
         self.size = 21
         self.image = np.zeros((self.size, self.size))
@@ -65,11 +81,87 @@ class CatchEnv():
     def state_shape(self):
         return (self.fps,) + self.output_shape
 
-# define DNN class TODO
-# should contain 2 NN with same architecture
+class NeuralNetwork(nn.Module):
+    '''An simple neural network architecture with one hidden layer. 
+    The number of nodes can be specified per layer. The network is fully
+    connected and uses the ReLU activation function.'''
 
-# define replay class TODO
-# Create a buffer to store experience tuples of (state, action, reward, next_state, done).
+    def __init__(self, input_nodes, hidden_nodes, output_nodes):
+        super(NeuralNetwork, self).__init__()
+        self.input_layer = nn.Linear(input_nodes, hidden_nodes)
+        self.hidden_layer = nn.Linear(hidden_nodes, hidden_nodes)
+        self.output_layer = nn.Linear(hidden_nodes, output_nodes)
+
+    def forward(self, input_state):
+        '''Perform a forward pass. '''
+
+        temp_state = torch.relu(self.input_layer(input_state))
+        temp_state = torch.relu(self.hidden_layer(temp_state))
+        output = self.output_layer(temp_state)
+        return output
+
+class ExperienceReplay():
+    '''An experience replay buffer that stores a specified number of
+    experiences and is able to add to these experiences or sample a
+    specified number of experiences from the buffer. '''
+
+    def __init__(self, max_capacity):
+        self.idx = 0
+        self.buffer = []
+        self.capacity = max_capacity
+
+    def store(self, state, action, reward, next_state, is_finished):
+        '''Stores an experience in the buffer. '''
+
+        experience = (state, action, reward, next_state, is_finished)
+        if self.capacity >= len(self.buffer):
+            self.buffer.append(experience)
+        else:
+            self.buffer[self.idx] = experience
+        
+        self.idx = (self.idx + 1) % self.capacity
+
+    def sample(self, batch_size):
+        '''Samples a specified number of experiences from the buffer. '''
+
+        states = []
+        actions = []
+        rewards = []
+        next_states = []
+        is_finisheds = []
+
+        # sample batch and extract their information
+        batch_idx = np.random.choice(len(self.buffer), batch_size, replace=False)
+        for idx in batch_idx:
+            state, action, reward, next_state, is_finished = self.buffer[idx]
+            states.append(state)
+            actions.append(action)
+            rewards.append(reward)
+            next_states.append(next_state)
+            is_finisheds.append(is_finished)
+
+        # create tensors 
+        tensors = (torch.tensor(states).float(), torch.tensor(actions).long(), torch.tensor(rewards).long(), torch.tensor(next_states).float(), torch.tensor(is_finisheds).bool())
+
+        return tensors
+
+class DDQN():
+    # TODO make DDQN class that performs the training and playing
+    def __init__(self, input_nodes, hidden_nodes, output_nodes):
+        # initialize two identical networks as local and target
+        self.local_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
+        self.target_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
+
+
+# TODO
+# For each episode, initialize the state and play the game by selecting actions according to the epsilon-greedy policy. 
+# Store the experience tuple in the replay buffer and sample a batch of experiences from the buffer. 
+# Compute the target Q-values using the target network and update the Q-network using the loss function.
+# Update the target network: Every n episodes, update the target network by copying the weights from the Q-network.
+
+def choose_action():
+    # TODO: Implement
+    return random.randint(0,2)
 
 def run_environment():
     env = CatchEnv()
@@ -87,19 +179,8 @@ def run_environment():
 
         print("End of the episode")
 
-def choose_action():
-    # TODO: Implement
-    return random.randint(0,2)
-
-def training(): 
-    # TODO
-    # For each episode, initialize the state and play the game by selecting actions according to the epsilon-greedy policy. 
-    # Store the experience tuple in the replay buffer and sample a batch of experiences from the buffer. 
-    # Compute the target Q-values using the target network and update the Q-network using the loss function.
-
-    # Update the target network: Every n episodes, update the target network by copying the weights from the Q-network.
-    pass
-
 if __name__ == "__main__":
-    # Initialize hyperparameters: Set the learning rate, discount factor, exploration rate, batch size, and other hyperparameters.
     run_environment()
+    # agent = DDQN(INPUT_NODES, HIDDEN_NODES, OUTPUT_NODES)
+    # buffer = ExperienceReplay(MAX_CAPACITY)
+    
