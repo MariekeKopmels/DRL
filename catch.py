@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
+from torchvision import models
+from torchsummary import summary
 
 #TODO Adjust values
 LEARNING_RATE = 0.01
@@ -93,19 +95,22 @@ class NeuralNetwork(nn.Module):
         # self.hidden_layer = nn.Linear(hidden_nodes, hidden_nodes)
         # self.output_layer = nn.Linear(hidden_nodes, output_nodes)
         
-        self.conv = nn.Conv2d(4, 1, kernel_size = (5,5)) #Last four frames in the channels, 84*84 inputs
+        # TODO: Dit is echt een onzin cnn atm
+        
+        self.conv = nn.Conv2d(in_channels=4, out_channels=1, kernel_size = (3,3))
         self.activation = nn.ReLU()
-        self.fc = nn.Linear(80, output_nodes) #TODO: nu maar even 80 erin gegooid omdat dat eruit komt bij een kernel van 5x5
+        self.fc = nn.Linear(6724, output_nodes)
+        
 
     def forward(self, input_state):
         '''Perform a forward pass. '''
 
-        # temp_state = torch.relu(self.input_layer(input_state))
-        # temp_state = torch.relu(self.hidden_layer(temp_state))
-        # output = self.output_layer(temp_state)
-        
         temp_state = self.activation(self.conv(input_state))
+        temp_state = torch.flatten(temp_state, 1)
         output = self.fc(temp_state)
+        
+        # print(output.shape)
+        
         return output
 
 
@@ -178,11 +183,18 @@ def choose_action(main_model, target_model, env_state):
         return random.randint(0,2)
     else: 
         print("Exploit")
-        # TODO: use real input 
-        actions = main_model.forward(torch.randn(4, 84, 84).float()).detach().numpy()[0,0,:]
+        reformatted_env_state = np.transpose(env_state, [2, 0, 1])
+        
+        # actions = main_model.forward(torch.randn(4, 84, 84).float()).detach().numpy()[0,0,:]
+        actions = main_model.forward(torch.from_numpy(reformatted_env_state).float()).detach().numpy()
         print("Action probabilities: ", actions)
-        print("Chosen action: ", np.argmax(actions))
-        return np.argmax(actions)
+
+        action = np.argmax(actions)
+        print("Chosen action: ", action)
+
+        # print(summary(main_model, (4, 84, 84)))
+
+        return action
 
 def run_environment():
     env = CatchEnv()
