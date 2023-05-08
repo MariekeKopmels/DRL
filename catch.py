@@ -8,6 +8,7 @@ import time
 from torchvision import models
 from torchsummary import summary
 
+
 #TODO Adjust values
 LEARNING_RATE = 0.01
 DISCOUNT_FACTOR = 0.01
@@ -100,7 +101,7 @@ class NeuralNetwork(nn.Module):
         self.conv = nn.Conv2d(in_channels=4, out_channels=1, kernel_size = (3,3))
         self.activation = nn.ReLU()
         self.fc = nn.Linear(6724, output_nodes)
-        
+
 
     def forward(self, input_state):
         '''Perform a forward pass. '''
@@ -170,6 +171,7 @@ class DDQN():
         self.local_network = self.target_network
 
 
+
 # TODO
 # For each episode, initialize the state and play the game by selecting actions according to the epsilon-greedy policy. 
 # Store the experience tuple in the replay buffer and sample a batch of experiences from the buffer. 
@@ -195,6 +197,7 @@ def choose_action(main_model, target_model, env_state):
         # print(summary(main_model, (4, 84, 84)))
 
         return action
+
 
 def run_environment():
     env = CatchEnv()
@@ -246,3 +249,4 @@ if __name__ == "__main__":
     timestamp = time.time()
     run_environment()
     print("Done in {:.3f} seconds".format(time.time()-timestamp))
+    
