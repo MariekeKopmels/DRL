@@ -4,11 +4,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import time
+from torchvision import models
+from torchsummary import summary
+
 
 #TODO Adjust values
 LEARNING_RATE = 0.01
 DISCOUNT_FACTOR = 0.01
-EXPLORATION_RATE = 0.1
+EXPLORATION_RATE = 0.1 #TODO updaten naar decaying epsilon
 BATCH_SIZE = 32
 NUMBER_OF_EPOCHS = 1000
 INPUT_NODES = 1 # image as input
@@ -88,17 +92,28 @@ class NeuralNetwork(nn.Module):
 
     def __init__(self, input_nodes, hidden_nodes, output_nodes):
         super(NeuralNetwork, self).__init__()
-        self.input_layer = nn.Linear(input_nodes, hidden_nodes)
-        self.hidden_layer = nn.Linear(hidden_nodes, hidden_nodes)
-        self.output_layer = nn.Linear(hidden_nodes, output_nodes)
+        # self.input_layer = nn.Linear(input_nodes, hidden_nodes)
+        # self.hidden_layer = nn.Linear(hidden_nodes, hidden_nodes)
+        # self.output_layer = nn.Linear(hidden_nodes, output_nodes)
+        
+        # TODO: Dit is echt een onzin cnn atm
+        
+        self.conv = nn.Conv2d(in_channels=4, out_channels=1, kernel_size = (3,3))
+        self.activation = nn.ReLU()
+        self.fc = nn.Linear(6724, output_nodes)
+
 
     def forward(self, input_state):
         '''Perform a forward pass. '''
 
-        temp_state = torch.relu(self.input_layer(input_state))
-        temp_state = torch.relu(self.hidden_layer(temp_state))
-        output = self.output_layer(temp_state)
+        temp_state = self.activation(self.conv(input_state))
+        temp_state = torch.flatten(temp_state, 1)
+        output = self.fc(temp_state)
+        
+        # print(output.shape)
+        
         return output
+
 
 class ExperienceReplay():
     '''An experience replay buffer that stores a specified number of
@@ -151,6 +166,10 @@ class DDQN():
         # initialize two identical networks as local and target
         self.local_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
         self.target_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
+        
+    def update_local_network(self):
+        self.local_network = self.target_network
+
 
 
 # TODO
@@ -159,28 +178,75 @@ class DDQN():
 # Compute the target Q-values using the target network and update the Q-network using the loss function.
 # Update the target network: Every n episodes, update the target network by copying the weights from the Q-network.
 
-def choose_action():
-    # TODO: Implement
-    return random.randint(0,2)
+def choose_action(main_model, target_model, env_state):
+    ''' Either explores or use previouse experiences to decide what is the best action to take'''
+    if np.random.rand() < EXPLORATION_RATE:
+        print("Explore")
+        return random.randint(0,2)
+    else: 
+        print("Exploit")
+        reformatted_env_state = np.transpose(env_state, [2, 0, 1])
+        
+        # actions = main_model.forward(torch.randn(4, 84, 84).float()).detach().numpy()[0,0,:]
+        actions = main_model.forward(torch.from_numpy(reformatted_env_state).float()).detach().numpy()
+        print("Action probabilities: ", actions)
+
+        action = np.argmax(actions)
+        print("Chosen action: ", action)
+
+        # print(summary(main_model, (4, 84, 84)))
+
+        return action
+
 
 def run_environment():
     env = CatchEnv()
     number_of_episodes = 1
 
+    # TODO: checken of input/output size idd klopt zo
+    input_size = env.output_shape[0] * env.output_shape[1] #7056 (84*84) stond in het paper
+    
+    model = DDQN(input_size, HIDDEN_NODES, OUTPUT_NODES)
+    update_counter = 0 
+    buffer = ExperienceReplay(MAX_CAPACITY)
+    
+    # print("Local model: ", model.local_network)
+    
     for ep in range(number_of_episodes):
         env.reset()
         
         state, reward, terminal = env.step(1) 
 
+        # print("State size ", state.shape)
         while not terminal:
-            state, reward, terminal = env.step(choose_action())
+            # Choose and execute action
+            action = choose_action(model.local_network, model.target_network, state)
+            next_state, reward, terminal = env.step(action)
+            
+            # print(env.image)
             print("Reward obtained by the agent: {}".format(reward))
-            state = np.squeeze(state)
+            
+            # Store the trajectory in the buffer
+            buffer.store(state, action, reward, next_state, 1)
+            
+            # Wat doen we ook alweer met deze minibatch? 
+            # TODO: Bij samplen is de batch size groter dan de buffer zelf, dus gooit hij een error
+            # minibatch = buffer.sample(BATCH_SIZE)
+            
+            # TODO: Train the target/main model
+            
+            # Update the main model every four trajectories 
+            # TODO: Even checken of ik target en main niet door elkaar haal
+            if update_counter%4 == 0:
+                model.update_local_network()
+            
+            update_counter = update_counter + 1
+            state = np.squeeze(next_state)
 
         print("End of the episode")
 
 if __name__ == "__main__":
+    timestamp = time.time()
     run_environment()
-    # agent = DDQN(INPUT_NODES, HIDDEN_NODES, OUTPUT_NODES)
-    # buffer = ExperienceReplay(MAX_CAPACITY)
+    print("Done in {:.3f} seconds".format(time.time()-timestamp))
     
