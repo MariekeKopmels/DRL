@@ -10,11 +10,12 @@ from torchsummary import summary
 
 
 #TODO Adjust values
-LEARNING_RATE = 0.01
-DISCOUNT_FACTOR = 0.01
-EXPLORATION_RATE = 0.1 #TODO updaten naar decaying epsilon
+# LEARNING_RATE = 0.01
+# DISCOUNT_FACTOR = 0.01
+INITIAL_EXPLORATION_RATE = 0.5
+FINAL_EXPLORATION_RATE = 0.0001
 BATCH_SIZE = 32
-NUMBER_OF_EPOCHS = 1000
+NUMBER_OF_EPOCHS = 3000
 NUMBER_OF_OBSERVATION_EPOCHS = 32
 UPDATE_TARGET_FREQUENCY = 4
 INPUT_NODES = 1 # image as input
@@ -261,6 +262,7 @@ def run_environment():
     model = DDQN(input_size, HIDDEN_NODES, OUTPUT_NODES)
     buffer = ExperienceReplay(MAX_CAPACITY)
         
+    
     for ep in range(1, number_of_episodes + 1):
         env.reset()
         
@@ -272,7 +274,9 @@ def run_environment():
             if ep > NUMBER_OF_OBSERVATION_EPOCHS:
                 exploration_rate = 1
             else:
-                exploration_rate = EXPLORATION_RATE
+                exploration_rate = INITIAL_EXPLORATION_RATE
+                if exploration_rate > FINAL_EXPLORATION_RATE:
+                    exploration_rate = (INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE)/ep
 
             # Choose and execute action
             action = choose_action(model.local_network, model.target_network, state, exploration_rate)
@@ -292,11 +296,10 @@ def run_environment():
                     # Update target model
                     # TODO: Even checken of ik target en main niet door elkaar haal
                     model.update_local_network()
-                    pass
                         
             state = np.squeeze(next_state)
 
-        # TODO reduce epsilon
+        print(f"Exploration: {exploration_rate}")
 
         print("End of the episode")
 
