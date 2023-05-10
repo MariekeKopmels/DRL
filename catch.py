@@ -14,8 +14,8 @@ from torchsummary import summary
 # DISCOUNT_FACTOR = 0.01
 INITIAL_EXPLORATION_RATE = 0.5
 FINAL_EXPLORATION_RATE = 0.0001
-BATCH_SIZE = 32
-NUMBER_OF_EPOCHS = 3000
+BATCH_SIZE = 4 # TODO CHECK
+NUMBER_OF_EPOCHS = 300
 NUMBER_OF_OBSERVATION_EPOCHS = 32
 UPDATE_TARGET_FREQUENCY = 4
 INPUT_NODES = 1 # image as input
@@ -245,7 +245,9 @@ def perform_testing(env, model):
 
             # execute action
             next_state, reward, terminal = env.step(action)
-            
+
+            state = np.squeeze(next_state)
+
         # add final reward to the average
         average_reward += reward
 
@@ -253,7 +255,6 @@ def perform_testing(env, model):
 
 def run_environment():
     env = CatchEnv()
-    number_of_episodes = 15
     testing_results = []
 
     # TODO: checken of input/output size idd klopt zo
@@ -263,7 +264,7 @@ def run_environment():
     buffer = ExperienceReplay(MAX_CAPACITY)
         
     
-    for ep in range(1, number_of_episodes + 1):
+    for ep in range(1, NUMBER_OF_EPOCHS + 1):
         env.reset()
         
         # Get initial state and do not move
@@ -271,7 +272,7 @@ def run_environment():
 
         while not terminal:
             # first, always explore
-            if ep > NUMBER_OF_OBSERVATION_EPOCHS:
+            if ep < NUMBER_OF_OBSERVATION_EPOCHS:
                 exploration_rate = 1
             else:
                 exploration_rate = INITIAL_EXPLORATION_RATE
@@ -291,6 +292,7 @@ def run_environment():
             if ep > NUMBER_OF_OBSERVATION_EPOCHS:
                 minibatch = buffer.sample(BATCH_SIZE)
                 # TODO: Train main model
+                # learn(model, minibatch)
             
                 if ep % UPDATE_TARGET_FREQUENCY == 0:
                     # Update target model
