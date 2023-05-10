@@ -15,6 +15,8 @@ DISCOUNT_FACTOR = 0.01
 EXPLORATION_RATE = 0.1 #TODO updaten naar decaying epsilon
 BATCH_SIZE = 32
 NUMBER_OF_EPOCHS = 1000
+NUMBER_OF_OBSERVATION_EPOCHS = 32
+UPDATE_TARGET_FREQUENCY = 4
 INPUT_NODES = 1 # image as input
 HIDDEN_NODES = 10
 OUTPUT_NODES = 3 # three actions: left, right, neither
@@ -207,9 +209,9 @@ class DDQN():
 # Compute the target Q-values using the target network and update the Q-network using the loss function.
 # Update the target network: Every n episodes, update the target network by copying the weights from the Q-network.
 
-def choose_action(main_model, target_model, env_state):
+def choose_action(main_model, target_model, env_state, exploration_rate):
     ''' Either explores or use previouse experiences to decide what is the best action to take'''
-    if np.random.rand() < EXPLORATION_RATE:
+    if np.random.rand() < exploration_rate:
         print("Explore")
         return random.randint(0,2)
     else: 
@@ -227,55 +229,90 @@ def choose_action(main_model, target_model, env_state):
 
         return action
 
+def perform_testing(env, model):
+    average_reward = 0
+
+    # perform 10 testing runs
+    for _ in range(10):
+        # Get initial state and do not move
+        env.reset()
+        state, reward, terminal = env.step(2)
+
+        while not terminal:
+            # set exploration rate to zero to disable exploration during testing
+            action = choose_action(model.local_network, model.target_network, state, 0)
+
+            # execute action
+            next_state, reward, terminal = env.step(action)
+            
+        # add final reward to the average
+        average_reward += reward
+
+    return average_reward/10
 
 def run_environment():
     env = CatchEnv()
-    number_of_episodes = 1
+    number_of_episodes = 15
+    testing_results = []
 
     # TODO: checken of input/output size idd klopt zo
     input_size = env.output_shape[0] * env.output_shape[1] #7056 (84*84) stond in het paper
     
     model = DDQN(input_size, HIDDEN_NODES, OUTPUT_NODES)
-    update_counter = 0 
     buffer = ExperienceReplay(MAX_CAPACITY)
-    
-    # print("Local model: ", model.local_network)
-    
-    for ep in range(number_of_episodes):
+        
+    for ep in range(1, number_of_episodes + 1):
         env.reset()
         
-        state, reward, terminal = env.step(2) 
+        # Get initial state and do not move
+        state, reward, terminal = env.step(2)
 
-        # print("State size ", state.shape)
         while not terminal:
+            # first, always explore
+            if ep > NUMBER_OF_OBSERVATION_EPOCHS:
+                exploration_rate = 1
+            else:
+                exploration_rate = EXPLORATION_RATE
+
             # Choose and execute action
-            action = choose_action(model.local_network, model.target_network, state)
+            action = choose_action(model.local_network, model.target_network, state, exploration_rate)
             next_state, reward, terminal = env.step(action)
-            
-            # print(env.image)
-            print("Reward obtained by the agent: {}".format(reward))
             
             # Store the trajectory in the buffer
             buffer.store(state, action, reward, next_state, 1)
+
+            print("Reward obtained by the agent: {}".format(reward))
             
-            # Wat doen we ook alweer met deze minibatch? 
-            # TODO: Bij samplen is de batch size groter dan de buffer zelf, dus gooit hij een error
-            # minibatch = buffer.sample(BATCH_SIZE)
+            # finished observing, start training
+            if ep > NUMBER_OF_OBSERVATION_EPOCHS:
+                minibatch = buffer.sample(BATCH_SIZE)
+                # TODO: Train main model
             
-            # TODO: Train the target/main model
-            
-            # Update the main model every four trajectories 
-            # TODO: Even checken of ik target en main niet door elkaar haal
-            if update_counter%4 == 0:
-                model.update_local_network()
-            
-            update_counter = update_counter + 1
+                if ep % UPDATE_TARGET_FREQUENCY == 0:
+                    # Update target model
+                    # TODO: Even checken of ik target en main niet door elkaar haal
+                    model.update_local_network()
+                    pass
+                        
             state = np.squeeze(next_state)
+
+        # TODO reduce epsilon
 
         print("End of the episode")
 
+        # Perform testing at every 10 episodes
+        if ep % 10 == 0 and ep != 0:
+            average_reward = perform_testing(env, model)
+
+            # append the average reward over 10 testing runs
+            testing_results.append(average_reward)
+
+    return testing_results
+
 if __name__ == "__main__":
     timestamp = time.time()
-    run_environment()
+    testing_results = run_environment()
+    log_number = 0
+    np.save(f"group_56_catch_rewards_{log_number}.npy", testing_results)
     print("Done in {:.3f} seconds".format(time.time()-timestamp))
     
