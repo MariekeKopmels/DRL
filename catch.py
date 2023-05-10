@@ -94,25 +94,54 @@ class NeuralNetwork(nn.Module):
 
     def __init__(self, input_nodes, hidden_nodes, output_nodes):
         super(NeuralNetwork, self).__init__()
-        # self.input_layer = nn.Linear(input_nodes, hidden_nodes)
-        # self.hidden_layer = nn.Linear(hidden_nodes, hidden_nodes)
-        # self.output_layer = nn.Linear(hidden_nodes, output_nodes)
         
-        # TODO: Dit is echt een onzin cnn atm
+        # conv > relu > pool
+        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3) 
+        self.relu1 = nn.ReLU()
+        self.maxpool1 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
         
-        self.conv = nn.Conv2d(in_channels=4, out_channels=1, kernel_size = (3,3))
-        self.activation = nn.ReLU()
-        self.fc = nn.Linear(6724, output_nodes)
-
+        # conv > relu > pool
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3) 
+        self.relu2 = nn.ReLU()
+        self.maxpool2 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
+        
+        # fc > relu
+        self.fc1 = nn.Linear(in_features=2888, out_features=32)
+        self.relu3 = nn.ReLU()
+        
+        # fc
+        self.fc2 = nn.Linear(in_features=32, out_features=OUTPUT_NODES)
+        
 
     def forward(self, input_state):
         '''Perform a forward pass. '''
-
-        temp_state = self.activation(self.conv(input_state))
-        temp_state = torch.flatten(temp_state, 1)
-        output = self.fc(temp_state)
         
-        # print(output.shape)
+        # print("Input_state.shape: ", input_state.shape)
+        
+        temp_state = self.conv1(input_state)
+        temp_state = self.relu1(temp_state)
+        temp_state = self.maxpool1(temp_state)
+        
+        # print("Temp_state.shape: ", temp_state.shape)
+        
+        temp_state = self.conv2(temp_state)
+        temp_state = self.relu2(temp_state)
+        temp_state = self.maxpool2(temp_state)
+        
+        # print("Temp_state.shape: ", temp_state.shape)
+        
+        temp_state = torch.flatten(temp_state)
+        
+        # print("Temp_state.shape: ", temp_state.shape)
+        
+        temp_state = self.fc1(temp_state)
+        temp_state = self.relu3(temp_state)
+        
+        # print("Temp_state.shape: ", temp_state.shape)
+        
+        output = self.fc2(temp_state)
+        
+        # print("Output.shape: ", output.shape)
         
         return output
 
