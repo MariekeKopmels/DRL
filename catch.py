@@ -7,13 +7,14 @@ import torch.nn.functional as F
 import time
 from torchvision import models
 from torchsummary import summary
-
+import math
 
 #parameters
 LEARNING_RATE = 0.01 #alpha
 DISCOUNT_FACTOR = 0.01 #gamma
-INITIAL_EXPLORATION_RATE = 0.5
-FINAL_EXPLORATION_RATE = 0.0001
+INITIAL_EXPLORATION_RATE = 1
+DECAY_RATE = 0.001
+FINAL_EXPLORATION_RATE = 0.001
 BATCH_SIZE = 4 
 NUMBER_OF_EPOCHS = 5000 
 NUMBER_OF_OBSERVATION_EPOCHS = 32
@@ -198,7 +199,7 @@ class DDQN():
         self.optimizer = torch.optim.RMSprop(self.local_network.parameters(), lr=LEARNING_RATE)
                 
     def update_target_network(self):
-        self.target_network = self.local_network
+        self.target_network.load_state_dict(self.local_network.state_dict())
         
     def train(self, minibatch):        
         # Calculate update rule
@@ -294,7 +295,11 @@ def run_environment():
             else:
                 exploration_rate = INITIAL_EXPLORATION_RATE
                 if exploration_rate > FINAL_EXPLORATION_RATE:
-                    exploration_rate = (INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE)/ep
+                    # exponential decay
+                    # exploration_rate = INITIAL_EXPLORATION_RATE - (((INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE) / NUMBER_OF_EPOCHS ) * ep)
+                    exploration_rate = FINAL_EXPLORATION_RATE + (INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE) * math.exp(-DECAY_RATE * ep)
+
+            # print("Exploration rate: ", exploration_rate)
 
             # Choose and execute action
             action = choose_action(model.local_network, state, exploration_rate)
@@ -333,4 +338,3 @@ if __name__ == "__main__":
     log_number = 0
     np.save(f"group_56_catch_rewards_{log_number}.npy", testing_results)
     print("Done in {:.3f} seconds".format(time.time()-timestamp))
-    
