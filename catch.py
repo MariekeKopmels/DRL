@@ -296,9 +296,10 @@ def run_environment():
                 exploration_rate = INITIAL_EXPLORATION_RATE
                 if exploration_rate > FINAL_EXPLORATION_RATE:
                     # exponential decay
+                    # exploration_rate = INITIAL_EXPLORATION_RATE - (((INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE) / NUMBER_OF_EPOCHS ) * ep)
                     exploration_rate = FINAL_EXPLORATION_RATE + (INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE) * math.exp(-DECAY_RATE * ep)
 
-            # print(exploration_rate)
+            # print("Exploration rate: ", exploration_rate)
 
             # Choose and execute action
             action = choose_action(model.local_network, state, exploration_rate)
