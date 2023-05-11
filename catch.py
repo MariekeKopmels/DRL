@@ -10,13 +10,13 @@ from torchsummary import summary
 
 
 #TODO Adjust values
-# LEARNING_RATE = 0.01
-# DISCOUNT_FACTOR = 0.01
+LEARNING_RATE = 0.01 #alpha
+DISCOUNT_FACTOR = 0.01 #gamma
 INITIAL_EXPLORATION_RATE = 0.5
 FINAL_EXPLORATION_RATE = 0.0001
 BATCH_SIZE = 4 # TODO CHECK
-NUMBER_OF_EPOCHS = 300
-NUMBER_OF_OBSERVATION_EPOCHS = 32
+NUMBER_OF_EPOCHS = 10 #300
+NUMBER_OF_OBSERVATION_EPOCHS = 4 #32
 UPDATE_TARGET_FREQUENCY = 4
 INPUT_NODES = 1 # image as input
 HIDDEN_NODES = 10
@@ -96,6 +96,9 @@ class NeuralNetwork(nn.Module):
     def __init__(self, input_nodes, hidden_nodes, output_nodes):
         super(NeuralNetwork, self).__init__()
         
+        # self.loss = nn.MSELoss()
+        # self.optimizer = torch.optim.RMSprop(self.parameters(), LEARNING_RATE)
+        
         # conv > relu > pool
         self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3) 
         self.relu1 = nn.ReLU()
@@ -117,6 +120,7 @@ class NeuralNetwork(nn.Module):
     def forward(self, input_state):
         '''Perform a forward pass. '''
         
+        # print("--------Going to perform forward pass!--------")
         # print("Input_state.shape: ", input_state.shape)
         
         temp_state = self.conv1(input_state)
@@ -199,9 +203,45 @@ class DDQN():
         self.local_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
         self.target_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
         
+        self.optimizer = torch.optim.RMSprop(self.local_network.parameters(), lr=LEARNING_RATE)
+                
     def update_local_network(self):
         self.local_network = self.target_network
-
+        
+    def train(self, minibatch):
+        print("----------------Going to train with minibatch of shape: ", minibatch[3][:].shape, "----------------")
+        
+        # TODO: Check if Q1 and Q2 are used correcly (slide 41, lecture 1 en slide 26, lecture 2)
+        # TODO: Dit kan vast een stuk efficienter
+        next_states_max_Q = np.zeros(BATCH_SIZE)
+        next_states_max_Q_action = np.zeros(BATCH_SIZE)
+        states_target_Q = np.zeros(BATCH_SIZE)
+        states_expected_Q = np.zeros(BATCH_SIZE)
+        for idx in range(BATCH_SIZE):
+            # TODO: Double check if we use the correct four frames now
+            # or are we using the last 4 of one out of the four examples in the batch
+            Q_values = self.local_network.forward(minibatch[3][:][idx].permute(2, 0, 1)).float().detach().numpy()
+            next_states_max_Q[idx] = np.max(Q_values)
+            next_states_max_Q_action[idx] = np.argmax(Q_values)
+            
+            # TODO: Klopt niet, updaten! Even tijdelijk gedaan 
+            states_target_Q[idx] = DISCOUNT_FACTOR * (minibatch[2][:][idx] + next_states_max_Q[idx])
+                        
+            states_expected_Q[idx] = np.max(self.local_network.forward(minibatch[0][:][idx].permute(2, 0, 1)).float().detach().numpy())
+        
+        print("next_states_max_Q: ", next_states_max_Q)
+        print("next_states_max_Q_action: ", next_states_max_Q_action)
+        print("states_target_Q: ", states_target_Q)
+        print("states_expected_Q: ", states_expected_Q)
+        
+        mse_loss = nn.MSELoss()
+        loss = mse_loss(torch.tensor(states_expected_Q, requires_grad=True), torch.tensor(states_target_Q, requires_grad=True))
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+        
+        # TODO: Moet dit idd elke keer bij het trainen of elke x batches oid?
+        self.update_local_network()
 
 
 # TODO
@@ -225,8 +265,6 @@ def choose_action(main_model, target_model, env_state, exploration_rate):
 
         action = np.argmax(actions)
         print("Chosen action: ", action)
-
-        # print(summary(main_model, (4, 84, 84)))
 
         return action
 
@@ -283,6 +321,8 @@ def run_environment():
             action = choose_action(model.local_network, model.target_network, state, exploration_rate)
             next_state, reward, terminal = env.step(action)
             
+            print("Next_State: ", next_state.shape)
+            
             # Store the trajectory in the buffer
             buffer.store(state, action, reward, next_state, 1)
 
@@ -291,8 +331,8 @@ def run_environment():
             # finished observing, start training
             if ep > NUMBER_OF_OBSERVATION_EPOCHS:
                 minibatch = buffer.sample(BATCH_SIZE)
-                # TODO: Train main model
-                # learn(model, minibatch)
+                # Train target model
+                model.train(minibatch)
             
                 if ep % UPDATE_TARGET_FREQUENCY == 0:
                     # Update target model
