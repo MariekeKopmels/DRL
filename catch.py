@@ -9,19 +9,17 @@ from torchvision import models
 from torchsummary import summary
 
 
-#TODO Adjust values
+#parameters
 LEARNING_RATE = 0.01 #alpha
 DISCOUNT_FACTOR = 0.01 #gamma
 INITIAL_EXPLORATION_RATE = 0.5
 FINAL_EXPLORATION_RATE = 0.0001
-BATCH_SIZE = 4 # TODO CHECK
-NUMBER_OF_EPOCHS = 10 #300
-NUMBER_OF_OBSERVATION_EPOCHS = 4 #32
+BATCH_SIZE = 4 
+NUMBER_OF_EPOCHS = 5000 
+NUMBER_OF_OBSERVATION_EPOCHS = 32
 UPDATE_TARGET_FREQUENCY = 4
-INPUT_NODES = 1 # image as input
-HIDDEN_NODES = 10
 OUTPUT_NODES = 3 # three actions: left, right, neither
-MAX_CAPACITY = 256
+MAX_CAPACITY = 500
 
 class CatchEnv():
     '''Class implemented by course'''
@@ -93,14 +91,11 @@ class NeuralNetwork(nn.Module):
     The number of nodes can be specified per layer. The network is fully
     connected and uses the ReLU activation function.'''
 
-    def __init__(self, input_nodes, hidden_nodes, output_nodes):
+    def __init__(self, input_nodes, output_nodes):
         super(NeuralNetwork, self).__init__()
-        
-        # self.loss = nn.MSELoss()
-        # self.optimizer = torch.optim.RMSprop(self.parameters(), LEARNING_RATE)
-        
+                
         # conv > relu > pool
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3) 
+        self.conv1 = nn.Conv2d(in_channels=input_nodes, out_channels=16, kernel_size=3) 
         self.relu1 = nn.ReLU()
         self.maxpool1 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
         
@@ -114,7 +109,7 @@ class NeuralNetwork(nn.Module):
         self.relu3 = nn.ReLU()
         
         # fc
-        self.fc2 = nn.Linear(in_features=32, out_features=OUTPUT_NODES)
+        self.fc2 = nn.Linear(in_features=32, out_features=output_nodes)
         
 
     def forward(self, input_state):
@@ -192,79 +187,63 @@ class ExperienceReplay():
             is_finisheds.append(is_finished)
 
         # create tensors 
-        tensors = (torch.tensor(states).float(), torch.tensor(actions).long(), torch.tensor(rewards).long(), torch.tensor(next_states).float(), torch.tensor(is_finisheds).bool())
-
+        tensors = (torch.tensor(np.array(states)).float(), torch.tensor(np.array(actions)).long(), torch.tensor(np.array(rewards)).long(), torch.tensor(np.array(next_states)).float(), torch.tensor(np.array(is_finisheds)).bool())
         return tensors
 
 class DDQN():
-    # TODO make DDQN class that performs the training and playing
-    def __init__(self, input_nodes, hidden_nodes, output_nodes):
-        # initialize two identical networks as local and target
-        self.local_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
-        self.target_network = NeuralNetwork(input_nodes, hidden_nodes, output_nodes)
-        
+    def __init__(self, input_nodes, output_nodes):
+        # initialize two identical networks as local and target as well as the optimizer
+        self.local_network = NeuralNetwork(input_nodes, output_nodes)
+        self.target_network = NeuralNetwork(input_nodes, output_nodes)
         self.optimizer = torch.optim.RMSprop(self.local_network.parameters(), lr=LEARNING_RATE)
                 
-    def update_local_network(self):
-        self.local_network = self.target_network
+    def update_target_network(self):
+        self.target_network = self.local_network
         
-    def train(self, minibatch):
-        print("----------------Going to train with minibatch of shape: ", minibatch[3][:].shape, "----------------")
+    def train(self, minibatch):        
+        # Calculate update rule
         
-        # TODO: Check if Q1 and Q2 are used correcly (slide 41, lecture 1 en slide 26, lecture 2)
-        # TODO: Dit kan vast een stuk efficienter
-        next_states_max_Q = np.zeros(BATCH_SIZE)
-        next_states_max_Q_action = np.zeros(BATCH_SIZE)
-        states_target_Q = np.zeros(BATCH_SIZE)
-        states_expected_Q = np.zeros(BATCH_SIZE)
+        argmax_Q1_st_1_a = np.zeros(BATCH_SIZE, dtype=int)
+        local_Q = np.zeros(BATCH_SIZE)
+        expected_Q = np.zeros(BATCH_SIZE)
+        
         for idx in range(BATCH_SIZE):
-            # TODO: Double check if we use the correct four frames now
-            # or are we using the last 4 of one out of the four examples in the batch
-            Q_values = self.local_network.forward(minibatch[3][:][idx].permute(2, 0, 1)).float().detach().numpy()
-            next_states_max_Q[idx] = np.max(Q_values)
-            next_states_max_Q_action[idx] = np.argmax(Q_values)
             
-            # TODO: Klopt niet, updaten! Even tijdelijk gedaan 
-            states_target_Q[idx] = DISCOUNT_FACTOR * (minibatch[2][:][idx] + next_states_max_Q[idx])
+            Q1_st_1_a = self.local_network.forward(minibatch[3][idx].permute(2, 0, 1)).float().detach().numpy()
+            argmax_Q1_st_1_a[idx] = np.argmax(Q1_st_1_a)
+            
+            a_star = argmax_Q1_st_1_a[idx]
+            temp = self.target_network.forward(minibatch[3][idx].permute(2, 0, 1)).float().detach().numpy()
+            Q2_st_1_a_star = temp[a_star]
+            
+            a_t = minibatch[1][idx]
+            temp = self.local_network.forward(minibatch[0][idx].permute(2, 0, 1)).float().detach().numpy()
+            Q1_st_at = temp[a_t]
+            
+            r_t = minibatch[2][idx].numpy()
+            
+            # Compute update rule
+            local_Q[idx] = Q1_st_at + LEARNING_RATE * (r_t + DISCOUNT_FACTOR * Q2_st_1_a_star - Q1_st_at)
                         
-            states_expected_Q[idx] = np.max(self.local_network.forward(minibatch[0][:][idx].permute(2, 0, 1)).float().detach().numpy())
+            # Compute 
+            expected_Q[idx] = np.max(self.local_network.forward(minibatch[0][idx].permute(2, 0, 1)).float().detach().numpy())
         
-        print("next_states_max_Q: ", next_states_max_Q)
-        print("next_states_max_Q_action: ", next_states_max_Q_action)
-        print("states_target_Q: ", states_target_Q)
-        print("states_expected_Q: ", states_expected_Q)
-        
+        # Train the local model
         mse_loss = nn.MSELoss()
-        loss = mse_loss(torch.tensor(states_expected_Q, requires_grad=True), torch.tensor(states_target_Q, requires_grad=True))
+        loss = mse_loss(torch.tensor(expected_Q, requires_grad=True), torch.tensor(local_Q, requires_grad=True))
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        
-        # TODO: Moet dit idd elke keer bij het trainen of elke x batches oid?
-        self.update_local_network()
 
 
-# TODO
-# For each episode, initialize the state and play the game by selecting actions according to the epsilon-greedy policy. 
-# Store the experience tuple in the replay buffer and sample a batch of experiences from the buffer. 
-# Compute the target Q-values using the target network and update the Q-network using the loss function.
-# Update the target network: Every n episodes, update the target network by copying the weights from the Q-network.
-
-def choose_action(main_model, target_model, env_state, exploration_rate):
+def choose_action(local_network, env_state, exploration_rate):
     ''' Either explores or use previouse experiences to decide what is the best action to take'''
     if np.random.rand() < exploration_rate:
-        print("Explore")
         return random.randint(0,2)
     else: 
-        print("Exploit")
         reformatted_env_state = np.transpose(env_state, [2, 0, 1])
-        
-        # actions = main_model.forward(torch.randn(4, 84, 84).float()).detach().numpy()[0,0,:]
-        actions = main_model.forward(torch.from_numpy(reformatted_env_state).float()).detach().numpy()
-        print("Action probabilities: ", actions)
-
+        actions = local_network.forward(torch.from_numpy(reformatted_env_state).float()).detach().numpy()
         action = np.argmax(actions)
-        print("Chosen action: ", action)
 
         return action
 
@@ -279,7 +258,7 @@ def perform_testing(env, model):
 
         while not terminal:
             # set exploration rate to zero to disable exploration during testing
-            action = choose_action(model.local_network, model.target_network, state, 0)
+            action = choose_action(model.local_network, state, 0)
 
             # execute action
             next_state, reward, terminal = env.step(action)
@@ -295,14 +274,14 @@ def run_environment():
     env = CatchEnv()
     testing_results = []
 
-    # TODO: checken of input/output size idd klopt zo
-    input_size = env.output_shape[0] * env.output_shape[1] #7056 (84*84) stond in het paper
     
-    model = DDQN(input_size, HIDDEN_NODES, OUTPUT_NODES)
+    model = DDQN(4, OUTPUT_NODES)
     buffer = ExperienceReplay(MAX_CAPACITY)
         
     
     for ep in range(1, NUMBER_OF_EPOCHS + 1):
+        print("In episode ", ep)
+        
         env.reset()
         
         # Get initial state and do not move
@@ -318,16 +297,15 @@ def run_environment():
                     exploration_rate = (INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE)/ep
 
             # Choose and execute action
-            action = choose_action(model.local_network, model.target_network, state, exploration_rate)
+            action = choose_action(model.local_network, state, exploration_rate)
             next_state, reward, terminal = env.step(action)
-            
-            print("Next_State: ", next_state.shape)
-            
+                        
             # Store the trajectory in the buffer
-            buffer.store(state, action, reward, next_state, 1)
-
-            print("Reward obtained by the agent: {}".format(reward))
-            
+            if terminal:
+                buffer.store(state, action, reward, next_state, 1)
+            else:
+                buffer.store(state, action, reward, next_state, 0)
+                            
             # finished observing, start training
             if ep > NUMBER_OF_OBSERVATION_EPOCHS:
                 minibatch = buffer.sample(BATCH_SIZE)
@@ -336,14 +314,9 @@ def run_environment():
             
                 if ep % UPDATE_TARGET_FREQUENCY == 0:
                     # Update target model
-                    # TODO: Even checken of ik target en main niet door elkaar haal
-                    model.update_local_network()
-                        
+                    model.update_target_network()
+            
             state = np.squeeze(next_state)
-
-        print(f"Exploration: {exploration_rate}")
-
-        print("End of the episode")
 
         # Perform testing at every 10 episodes
         if ep % 10 == 0 and ep != 0:
