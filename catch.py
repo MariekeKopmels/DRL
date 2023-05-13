@@ -8,6 +8,7 @@ import time
 from torchvision import models
 from torchsummary import summary
 import math
+from collections import namedtuple, deque
 
 #parameters
 LEARNING_RATE = 0.01 #alpha
@@ -15,8 +16,8 @@ DISCOUNT_FACTOR = 0.01 #gamma
 INITIAL_EXPLORATION_RATE = 1
 DECAY_RATE = 0.001
 FINAL_EXPLORATION_RATE = 0.001
-BATCH_SIZE = 4 
-NUMBER_OF_EPOCHS = 5000 
+BATCH_SIZE = 1
+NUMBER_OF_EPOCHS = 100 
 NUMBER_OF_OBSERVATION_EPOCHS = 32
 UPDATE_TARGET_FREQUENCY = 4
 OUTPUT_NODES = 3 # three actions: left, right, neither
@@ -191,6 +192,30 @@ class ExperienceReplay():
         tensors = (torch.tensor(np.array(states)).float(), torch.tensor(np.array(actions)).long(), torch.tensor(np.array(rewards)).long(), torch.tensor(np.array(next_states)).float(), torch.tensor(np.array(is_finisheds)).bool())
         return tensors
 
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'reward', 'next_state'))
+
+
+class ReplayMemory(object):
+
+    def __init__(self, capacity):
+        self.memory = deque([], maxlen=capacity)
+
+    def store(self, state, action, reward, next_state):
+        """Save a transition"""
+        state = torch.tensor(np.array(state)).float()
+        action = torch.tensor(np.array(action)).long()
+        reward = torch.tensor(np.array(reward)).long()
+        next_state = torch.tensor(np.array(next_state)).float()
+
+        self.memory.append(Transition(state, action, reward, next_state))
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+
 class DDQN():
     def __init__(self, input_nodes, output_nodes):
         # initialize two identical networks as local and target as well as the optimizer
@@ -201,6 +226,50 @@ class DDQN():
     def update_target_network(self):
         self.target_network.load_state_dict(self.local_network.state_dict())
         
+    def optimize_model(self, batch):
+        # batch.next_state = torch.tensor(np.array(batch.next_state)).float()
+        # print(batch.action)
+    # Compute a mask of non-final states and concatenate the batch elements
+    # (a final state would've been the one after which simulation ended)
+        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                            batch.next_state)), dtype=torch.bool)
+        non_final_next_states = torch.cat([s for s in batch.next_state
+                                                    if s is not None])
+        state_batch = torch.cat(batch.state, dim=2).permute(2, 0, 1)
+        # state_batch = batch.state
+        print(batch.state[0].shape)
+        # action_batch = torch.cat(batch.action)
+        action_batch = batch.action
+        # reward_batch = torch.cat(batch.reward)
+        reward_batch = batch.reward
+
+        # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+        # columns of actions taken. These are the actions which would've been taken
+        # for each batch state according to policy_net
+        state_action_values = self.local_network(state_batch).gather(1, action_batch)
+
+        # Compute V(s_{t+1}) for all next states.
+        # Expected values of actions for non_final_next_states are computed based
+        # on the "older" target_net; selecting their best reward with max(1)[0].
+        # This is merged based on the mask, such that we'll have either the expected
+        # state value or 0 in case the state was final.
+        next_state_values = torch.zeros(BATCH_SIZE)
+        with torch.no_grad():
+            next_state_values[non_final_mask] = self.target_network(non_final_next_states).max(1)[0]
+        # Compute the expected Q values
+        expected_state_action_values = (next_state_values * DISCOUNT_FACTOR) + reward_batch
+
+        # Compute Huber loss
+        criterion = nn.SmoothL1Loss()
+        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+        # Optimize the model
+        self.optimizer.zero_grad()
+        loss.backward()
+        # In-place gradient clipping
+        torch.nn.utils.clip_grad_value_(self.local_network.parameters(), 100)
+        self.optimizer.step()
+
     def train(self, minibatch):        
         # Calculate update rule
         
@@ -275,9 +344,12 @@ def run_environment():
     env = CatchEnv()
     testing_results = []
 
+    print("run")
+
     
     model = DDQN(4, OUTPUT_NODES)
-    buffer = ExperienceReplay(MAX_CAPACITY)
+    # buffer = ExperienceReplay(MAX_CAPACITY)
+    buffer = ReplayMemory(MAX_CAPACITY)
         
     
     for ep in range(1, NUMBER_OF_EPOCHS + 1):
@@ -304,18 +376,30 @@ def run_environment():
             # Choose and execute action
             action = choose_action(model.local_network, state, exploration_rate)
             next_state, reward, terminal = env.step(action)
-                        
+            
             # Store the trajectory in the buffer
             if terminal:
-                buffer.store(state, action, reward, next_state, 1)
+                # next_state = None
+                # buffer.store(state, action, reward, next_state, 1)
+                buffer.store(state, action, reward, next_state)
             else:
-                buffer.store(state, action, reward, next_state, 0)
+                # next_state = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0)
+                # buffer.store(state, action, reward, next_state, 0)
+                buffer.store(state, action, reward, next_state)
                             
             # finished observing, start training
             if ep > NUMBER_OF_OBSERVATION_EPOCHS:
                 minibatch = buffer.sample(BATCH_SIZE)
                 # Train target model
-                model.train(minibatch)
+                # model.train(minibatch)
+
+                # transitions = memory.sample(BATCH_SIZE)
+                # # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+                # # detailed explanation). This converts batch-array of Transitions
+                # # to Transition of batch-arrays.
+                batch = Transition(*zip(*minibatch))
+
+                model.optimize_model(batch)
             
                 if ep % UPDATE_TARGET_FREQUENCY == 0:
                     # Update target model
