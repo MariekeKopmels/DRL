@@ -19,6 +19,8 @@ NUM_ENVS = 4
 TARGET_UPDATE_FREQ=10000 // NUM_ENVS
 LR = 5e-5
 
+episodes = 0
+
 class CatchEnv():
     '''Class implemented by course'''
 
@@ -134,7 +136,7 @@ def run_initial_observations(env, experience_replay):
         if terminal:
             state = env.reset()
 
-def perform_testing(env, online_net):
+def perform_testing(env, online_net, episodes):
     '''Performs testing as prescribed in the assignment.'''
     average_reward = 0
 
@@ -156,6 +158,8 @@ def perform_testing(env, online_net):
         average_reward += reward
 
     state = env.reset()
+
+    print(f"{episodes} epsisodes passed, winrate: {average_reward/10}")
 
     return average_reward/10
 
@@ -203,7 +207,7 @@ def perform_training(env, experience_replay, online_net, target_net, optimizer):
     state = env.reset()
 
     # 11 steps per episode
-    for step in range(1, 100000):
+    for step in range(1, 110000):
 
         # execute epsilon greedy policy
         epsilon = np.interp(step, [0, EPSILON_DECAY], [EPSILON_START, EPSILON_END])
@@ -232,7 +236,7 @@ def perform_training(env, experience_replay, online_net, target_net, optimizer):
 
         # Perform testing at every 10 episodes = 110 steps
         if step % 110 == 0 and step != 0:
-            average_reward = perform_testing(env, online_net)
+            average_reward = perform_testing(env, online_net, int(step/11))
 
             # append the average reward over 10 testing runs
             testing_results.append(average_reward)
