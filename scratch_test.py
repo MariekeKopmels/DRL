@@ -6,14 +6,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from collections import deque
 
 # paramerters
-MAX_CAPACITY = 500
+# MAX_CAPACITY = 500
 
-BATCH_SIZE = 8
+# BATCH_SIZE = 8
+
+# LEARNING_RATE = 0.1 #alpha
+# DISCOUNT_FACTOR = 0.1 #gamma
+
+# NUM_ACTIONS = 3
+
+# INITIAL_EXPLORATION_RATE = 1
+# FINAL_EXPLORATION_RATE = 0.01
+# DECAY_RATE = 0.001
+
+# NUMBER_OF_EPOCHS = 2000
+# NUMBER_OF_TESTING_EPOCHS = 10
+# NUMBER_OF_OBSERVATION_EPOCHS = 32 #TODO: Waarop is deze 32 gebaseerd?
+
+MAX_CAPACITY = 100000
+MIN_REPLAY_SIZE = 500
+
+BATCH_SIZE = 32
 
 LEARNING_RATE = 0.1 #alpha
-DISCOUNT_FACTOR = 0.1 #gamma
+DISCOUNT_FACTOR = 0.99 #gamma
 
 NUM_ACTIONS = 3
 
@@ -21,9 +40,9 @@ INITIAL_EXPLORATION_RATE = 1
 FINAL_EXPLORATION_RATE = 0.01
 DECAY_RATE = 0.001
 
-NUMBER_OF_EPOCHS = 2000
+NUMBER_OF_STEPS = 11000
 NUMBER_OF_TESTING_EPOCHS = 10
-NUMBER_OF_OBSERVATION_EPOCHS = 32 #TODO: Waarop is deze 32 gebaseerd?
+NUMBER_OF_OBSERVATION_EPOCHS = 32*11 #TODO: Waarop is deze 32 gebaseerd? *11 toch?
 
 class CatchEnv():
     def __init__(self):
@@ -145,94 +164,94 @@ class CNN(nn.Module):
         
         return self.net(input_state)
 
-class DQN():
-    def __init__(self):
-        self.network = CNN(NUM_ACTIONS)
-        # self.optimizer = torch.optim.RMSprop(self.network.parameters(), lr=LEARNING_RATE)
-        self.optimizer = torch.optim.Adam(self.network.parameters(), lr = LEARNING_RATE)
+# class DQN():
+#     def __init__(self):
+#         self.network = CNN(NUM_ACTIONS)
+#         # self.optimizer = torch.optim.RMSprop(self.network.parameters(), lr=LEARNING_RATE)
+#         self.optimizer = torch.optim.Adam(self.network.parameters(), lr = LEARNING_RATE)
 
     
-    def train(self, minibatch):
-        # self.network.train()
+#     def train(self, minibatch):
+#         # self.network.train()
         
-        Q_st_at = np.zeros(len(minibatch[0]))
-        r_t = np.zeros(len(minibatch[0]))
-        max_Q_st_1_a = np.zeros(len(minibatch[0]))
-        update = np.zeros(len(minibatch[0]))
+#         Q_st_at = np.zeros(len(minibatch[0]))
+#         r_t = np.zeros(len(minibatch[0]))
+#         max_Q_st_1_a = np.zeros(len(minibatch[0]))
+#         update = np.zeros(len(minibatch[0]))
         
-        for idx in range(len(minibatch[0])):
-            # print("Idx: ", idx)
-            example_state = minibatch[0][idx]
-            example_action = minibatch[1][idx]
-            example_reward = minibatch[2][idx]
-            example_next_state = minibatch[3][idx]
-            example_is_finished = minibatch[4][idx]
+#         for idx in range(len(minibatch[0])):
+#             # print("Idx: ", idx)
+#             example_state = minibatch[0][idx]
+#             example_action = minibatch[1][idx]
+#             example_reward = minibatch[2][idx]
+#             example_next_state = minibatch[3][idx]
+#             example_is_finished = minibatch[4][idx]
             
-            Q_st_at[idx] = self.network.forward(example_state.permute(2, 0, 1)).max().item()
-            # Q_st_at[idx] = self.network.forward(example_state).max().item()
+#             Q_st_at[idx] = self.network.forward(example_state.permute(2, 0, 1)).max().item()
+#             # Q_st_at[idx] = self.network.forward(example_state).max().item()
             
-            r_t[idx] = example_reward.item()
+#             r_t[idx] = example_reward.item()
 
-            max_Q_st_1_a[idx] = self.network.forward(example_next_state.permute(2, 0, 1)).max().item()
-            # max_Q_st_1_a[idx] = self.network.forward(example_next_state).max().item()
+#             max_Q_st_1_a[idx] = self.network.forward(example_next_state.permute(2, 0, 1)).max().item()
+#             # max_Q_st_1_a[idx] = self.network.forward(example_next_state).max().item()
 
-            # print(" Q_st_at[idx]: ", Q_st_at[idx] )
-            # print(" r_t[idx]: ", r_t[idx])
-            # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
-            # print(" update[idx]: ", update[idx])
+#             # print(" Q_st_at[idx]: ", Q_st_at[idx] )
+#             # print(" r_t[idx]: ", r_t[idx])
+#             # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
+#             # print(" update[idx]: ", update[idx])
             
-            update[idx] = Q_st_at[idx] + LEARNING_RATE * (r_t[idx] + (DISCOUNT_FACTOR * max_Q_st_1_a[idx]) - Q_st_at[idx])
+#             update[idx] = Q_st_at[idx] + LEARNING_RATE * (r_t[idx] + (DISCOUNT_FACTOR * max_Q_st_1_a[idx]) - Q_st_at[idx])
             
             
-        print("Update:  ", update)
-        print("Q_st_at: ", Q_st_at)
+#         print("Update:  ", update)
+#         print("Q_st_at: ", Q_st_at)
         
         
         
-        # mse_loss = nn.MSELoss()
-        # loss = mse_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
-        loss = nn.functional.smooth_l1_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+#         # mse_loss = nn.MSELoss()
+#         # loss = mse_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
+#         loss = nn.functional.smooth_l1_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
+#         self.optimizer.zero_grad()
+#         loss.backward()
+#         self.optimizer.step()
         
-        print("Performed training, now retry")
+#         print("Performed training, now retry")
         
-        Q_st_at = np.zeros(len(minibatch[0]))
-        r_t = np.zeros(len(minibatch[0]))
-        max_Q_st_1_a = np.zeros(len(minibatch[0]))
-        update = np.zeros(len(minibatch[0]))
+#         Q_st_at = np.zeros(len(minibatch[0]))
+#         r_t = np.zeros(len(minibatch[0]))
+#         max_Q_st_1_a = np.zeros(len(minibatch[0]))
+#         update = np.zeros(len(minibatch[0]))
         
-        for idx in range(len(minibatch[0])):
-            example_state = minibatch[0][idx]
-            example_action = minibatch[1][idx]
-            example_reward = minibatch[2][idx]
-            example_next_state = minibatch[3][idx]
-            example_is_finished = minibatch[4][idx]
+#         for idx in range(len(minibatch[0])):
+#             example_state = minibatch[0][idx]
+#             example_action = minibatch[1][idx]
+#             example_reward = minibatch[2][idx]
+#             example_next_state = minibatch[3][idx]
+#             example_is_finished = minibatch[4][idx]
             
-            Q_st_at[idx] = self.network.forward(example_state.permute(2, 0, 1)).max().item()
+#             Q_st_at[idx] = self.network.forward(example_state.permute(2, 0, 1)).max().item()
             
-            r_t[idx] = example_reward.item()
+#             r_t[idx] = example_reward.item()
 
-            max_Q_st_1_a[idx] = self.network.forward(example_next_state.permute(2, 0, 1)).max().item()
+#             max_Q_st_1_a[idx] = self.network.forward(example_next_state.permute(2, 0, 1)).max().item()
             
-            # print(" Q_st_at[idx]: ", Q_st_at[idx] )
-            # print(" r_t[idx]: ", r_t[idx])
-            # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
-            # print(" update[idx]: ", update[idx])
+#             # print(" Q_st_at[idx]: ", Q_st_at[idx] )
+#             # print(" r_t[idx]: ", r_t[idx])
+#             # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
+#             # print(" update[idx]: ", update[idx])
             
-            update[idx] = Q_st_at[idx] + LEARNING_RATE * (r_t[idx] + (DISCOUNT_FACTOR * max_Q_st_1_a[idx]) - Q_st_at[idx])
+#             update[idx] = Q_st_at[idx] + LEARNING_RATE * (r_t[idx] + (DISCOUNT_FACTOR * max_Q_st_1_a[idx]) - Q_st_at[idx])
             
             
-        print("Update:  ", update)
-        print("Q_st_at: ", Q_st_at)
+#         print("Update:  ", update)
+#         print("Q_st_at: ", Q_st_at)
         
-        return
+#         return
     
 class ExperienceReplay():
     def __init__(self):
         # self.idx = 0
-        self.buffer = []
+        self.buffer = deque(maxlen=MAX_CAPACITY)
         self.capacity = MAX_CAPACITY
         
     def store(self, state, action, reward, next_state, is_finished):
@@ -268,6 +287,7 @@ class ExperienceReplay():
         return tensors
         
 def action_selection(network, state, exploration_rate):
+    
     if np.random.rand() < exploration_rate:
         return random.randint(0,2)
     else:
@@ -281,69 +301,157 @@ def get_exploration_rate(epoch):
         # print("For epoch ", epoch, ", we have an exploration rate of 1 ----------- observation phase")
         return 1
     else:
-        exploration_rate = FINAL_EXPLORATION_RATE + (INITIAL_EXPLORATION_RATE - FINAL_EXPLORATION_RATE) * math.exp(-DECAY_RATE * epoch)
+        exploration_rate = np.interp(epoch, [0, DECAY_RATE], [INITIAL_EXPLORATION_RATE, FINAL_EXPLORATION_RATE])
         # print("For epoch ", epoch, ", we have an exploration rate of ", exploration_rate, " ----------- training phase")
         return exploration_rate
     
+def run_initial_observations(env, experience_replay):
+    state = env.reset()
     
-def perform_testing(env, model):
+    for _ in range(MIN_REPLAY_SIZE):
+        action = random.randint(0,2)
+        
+        next_state, reward, is_finished = env.step(action)
+        
+        experience_replay.store(state, action, reward, next_state, is_finished)  
+        
+        if is_finished:
+            state = env.reset()
+    
+    
+def perform_testing(env, model, epoch):
     total_reward = 0
     
     for run in range(NUMBER_OF_TESTING_EPOCHS):
-        env.reset()
-        # TODO: Updaten naar 2?
-        state, reward, terminal = env.step(1)
+        state = env.reset()
+        is_finished = False
         
-        while not terminal:
-            action = action_selection(model.network, state, 0)
-            # print("Action: ", action)
-            next_state, reward, terminal = env.step(action)
+        while not is_finished:
+            action = action_selection(model, state, 0)
+            # print("Testing - Action: ", action)
+            next_state, reward, is_finished = env.step(action)
             state = np.squeeze(next_state)
             
         total_reward = total_reward + reward
         
+    state = env.reset()
+        
     return total_reward/NUMBER_OF_TESTING_EPOCHS
+
+def perform_learning(experience_replay, model, optimizer):
+    minibatch = experience_replay.sample(BATCH_SIZE)
+    
+    Q_st_at = np.zeros(len(minibatch[0]))
+    r_t = np.zeros(len(minibatch[0]))
+    max_Q_st_1_a = np.zeros(len(minibatch[0]))
+    update = np.zeros(len(minibatch[0]))
+    
+    for idx in range(len(minibatch[0])):
+        # print("Idx: ", idx)
+        example_state = minibatch[0][idx]
+        example_action = minibatch[1][idx]
+        example_reward = minibatch[2][idx]
+        example_next_state = minibatch[3][idx]
+        example_is_finished = minibatch[4][idx]
+        
+        Q_st_at[idx] = model.forward(example_state.permute(2, 0, 1)).max().item()
+        # Q_st_at[idx] = self.network.forward(example_state).max().item()
+        
+        r_t[idx] = example_reward.item()
+
+        max_Q_st_1_a[idx] = model.forward(example_next_state.permute(2, 0, 1)).max().item()
+        # max_Q_st_1_a[idx] = self.network.forward(example_next_state).max().item()
+
+        # print(" Q_st_at[idx]: ", Q_st_at[idx] )
+        # print(" r_t[idx]: ", r_t[idx])
+        # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
+        # print(" update[idx]: ", update[idx])
+        
+        update[idx] = Q_st_at[idx] + LEARNING_RATE * (r_t[idx] + (DISCOUNT_FACTOR * max_Q_st_1_a[idx]) - Q_st_at[idx])
+        
+    # print("Update:  ", update)
+    # print("Q_st_at: ", Q_st_at)
+        
+    loss = nn.functional.smooth_l1_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    
+    # Q_st_at = np.zeros(len(minibatch[0]))
+    # r_t = np.zeros(len(minibatch[0]))
+    # max_Q_st_1_a = np.zeros(len(minibatch[0]))
+    # update = np.zeros(len(minibatch[0]))
+    
+    # for idx in range(len(minibatch[0])):
+    #     # print("Idx: ", idx)
+    #     example_state = minibatch[0][idx]
+    #     example_action = minibatch[1][idx]
+    #     example_reward = minibatch[2][idx]
+    #     example_next_state = minibatch[3][idx]
+    #     example_is_finished = minibatch[4][idx]
+        
+    #     Q_st_at[idx] = model.forward(example_state.permute(2, 0, 1)).max().item()
+    #     # Q_st_at[idx] = self.network.forward(example_state).max().item()
+        
+    #     r_t[idx] = example_reward.item()
+
+    #     max_Q_st_1_a[idx] = model.forward(example_next_state.permute(2, 0, 1)).max().item()
+    #     # max_Q_st_1_a[idx] = self.network.forward(example_next_state).max().item()
+
+    #     # print(" Q_st_at[idx]: ", Q_st_at[idx] )
+    #     # print(" r_t[idx]: ", r_t[idx])
+    #     # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
+    #     # print(" update[idx]: ", update[idx])
+        
+    #     update[idx] = Q_st_at[idx] + LEARNING_RATE * (r_t[idx] + (DISCOUNT_FACTOR * max_Q_st_1_a[idx]) - Q_st_at[idx])
+        
+    # print("Second try-------------------- ")
+    # print("Update:  ", update)
+    # print("Q_st_at: ", Q_st_at)
+        
+
+def perform_training(env, experience_replay, model, optimizer):
+    
+    results = []
+    
+    state = env.reset()
+
+    for step in range(NUMBER_OF_STEPS):
+        
+        action = action_selection(model, state, get_exploration_rate(step))
+        # print("Training - Action: ", action)
+        next_state, reward, is_finished = env.step(action)
+        experience_replay.store(state, action, reward, next_state, is_finished)
+        
+        state = next_state
+        
+        if is_finished:
+            state = env.reset()
+            
+        perform_learning(experience_replay, model, optimizer)
+        
+        if step % 110 == 0 and step != 0:
+            print("In epoch ", int(step/11))
+            average_reward = perform_testing(env, model, int(step/11))
+
+            # append the average reward over 10 testing runs
+            results.append(average_reward)
+            
+    return results
 
 
 def run_environment():
     env = CatchEnv()
-    results = []
 
-    model = DQN()
-    buffer = ExperienceReplay()
+    model = CNN(NUM_ACTIONS)
+    experience_replay = ExperienceReplay()
+    
+    optimizer = torch.optim.Adam(model.parameters(), LEARNING_RATE)
 
-    for ep in range(NUMBER_OF_EPOCHS):
-        print("In episode ", ep)
-        env.reset()
-
-        # TODO: Updaten naar 2? 
-        state, reward, terminal = env.step(1) 
-
-        while not terminal:
-            
-            # print("Type(state): ", type(state))
-            # print("state.shape: ", state.shape)
-            # choose and execute action
-            action = action_selection(model.network, state, get_exploration_rate(ep))
-            next_state, reward, terminal = env.step(action)
-            # print("Reward obtained by the agent: {}".format(reward))
-            
-            # store states in the replay buffer
-            if not terminal: 
-                buffer.store(state, action, reward, next_state, 0)
-            else: 
-                buffer.store(state, action, reward, next_state, 1)
-            
-            # train the model
-            if ep > NUMBER_OF_OBSERVATION_EPOCHS:
-                model.train(buffer.sample(BATCH_SIZE))
-            
-            state = np.squeeze(next_state)
-                  
-        if ep % 10 == 0 and ep != 0:
-            average_reward = perform_testing(env, model)
-            results.append(average_reward)
-            
+    run_initial_observations(env, experience_replay)
+    
+    results = perform_training(env, experience_replay, model, optimizer)
+    
     return results
 
 
