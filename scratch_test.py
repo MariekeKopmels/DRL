@@ -4,6 +4,7 @@ import numpy as np
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 
 # paramerters
@@ -90,64 +91,69 @@ class CatchEnv():
 class CNN(nn.Module):
     def __init__(self, output_nodes):
         super(CNN, self).__init__()
-        # conv > relu > pool
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3) 
-        self.relu1 = nn.ReLU()
-        self.maxpool1 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
+        # self.layer1 = nn.Linear(4, 128)
+        # self.layer2 = nn.Linear(128, 128)
+        # self.layer3 = nn.Linear(128, 3)
         
-        # conv > relu > pool
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3) 
-        self.relu2 = nn.ReLU()
-        self.maxpool2 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2,2), stride=(2,2)),
+            
+            nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2,2), stride=(2,2)),
+            
+            nn.Flatten(start_dim=0),
+            
+            nn.Linear(in_features=2888, out_features=32),
+            nn.ReLU(),
+            
+            nn.Linear(in_features=32, out_features=output_nodes)
+        )
         
-        # fc > relu
-        self.fc1 = nn.Linear(in_features=2888, out_features=32)
-        self.relu3 = nn.ReLU()
+        # # conv > relu > pool
+        # self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3) 
+        # self.relu1 = nn.ReLU()
+        # self.maxpool1 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
         
-        # fc
-        self.fc2 = nn.Linear(in_features=32, out_features=output_nodes)
+        # # conv > relu > pool
+        # self.conv2 = nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3) 
+        # self.relu2 = nn.ReLU()
+        # self.maxpool2 = nn.MaxPool2d(kernel_size=(2,2), stride=(2,2))
+        
+        # # fc > relu
+        # self.fc1 = nn.Linear(in_features=2888, out_features=32)
+        # self.relu3 = nn.ReLU()
+        
+        # # fc
+        # self.fc2 = nn.Linear(in_features=32, out_features=output_nodes)
         
     def forward(self, input_state):
-        '''Perform a forward pass. '''
+        # print("Shape: ", input_state.shape)
+        # x = F.relu(self.conv1(input_state))
+        # x = F.max_pool2d(x, kernel_size=(2,2), stride=(2,2))
+        # # print("Shape: ", x.shape)
+        # x = F.relu(self.conv2(x))
+        # x = F.max_pool2d(x, kernel_size=(2,2), stride=(2,2))
+        # # print("Shape: ", x.shape)
+        # x = torch.flatten(x)
+        # # print("Shape: ", x.shape)
+        # x = F.relu(self.fc1(x))
+        # # print("Shape: ", x.shape)
+        # x = self.fc2(x)
         
-        # print("--------Going to perform forward pass!--------")
-        # print("Input_state.shape: ", input_state.shape)
-        
-        temp_state = self.conv1(input_state)
-        temp_state = self.relu1(temp_state)
-        temp_state = self.maxpool1(temp_state)
-        
-        # print("Temp_state.shape: ", temp_state.shape)
-        
-        temp_state = self.conv2(temp_state)
-        temp_state = self.relu2(temp_state)
-        temp_state = self.maxpool2(temp_state)
-        
-        # print("Temp_state.shape: ", temp_state.shape)
-        
-        temp_state = torch.flatten(temp_state)
-        
-        # print("Temp_state.shape: ", temp_state.shape)
-        
-        temp_state = self.fc1(temp_state)
-        temp_state = self.relu3(temp_state)
-        
-        # print("Temp_state.shape: ", temp_state.shape)
-        
-        output = self.fc2(temp_state)
-        
-        # print("Output.shape: ", output.shape)
-        
-        return output
-    
+        return self.net(input_state)
 
 class DQN():
     def __init__(self):
         self.network = CNN(NUM_ACTIONS)
-        print("self.network.parameters(): ", self.network.parameters())
-        self.optimizer = torch.optim.RMSprop(self.network.parameters(), lr=LEARNING_RATE)
+        # self.optimizer = torch.optim.RMSprop(self.network.parameters(), lr=LEARNING_RATE)
+        self.optimizer = torch.optim.Adam(self.network.parameters(), lr = LEARNING_RATE)
+
     
     def train(self, minibatch):
+        # self.network.train()
         
         Q_st_at = np.zeros(len(minibatch[0]))
         r_t = np.zeros(len(minibatch[0]))
@@ -155,7 +161,7 @@ class DQN():
         update = np.zeros(len(minibatch[0]))
         
         for idx in range(len(minibatch[0])):
-            print("Idx: ", idx)
+            # print("Idx: ", idx)
             example_state = minibatch[0][idx]
             example_action = minibatch[1][idx]
             example_reward = minibatch[2][idx]
@@ -163,11 +169,13 @@ class DQN():
             example_is_finished = minibatch[4][idx]
             
             Q_st_at[idx] = self.network.forward(example_state.permute(2, 0, 1)).max().item()
+            # Q_st_at[idx] = self.network.forward(example_state).max().item()
             
             r_t[idx] = example_reward.item()
 
             max_Q_st_1_a[idx] = self.network.forward(example_next_state.permute(2, 0, 1)).max().item()
-            
+            # max_Q_st_1_a[idx] = self.network.forward(example_next_state).max().item()
+
             # print(" Q_st_at[idx]: ", Q_st_at[idx] )
             # print(" r_t[idx]: ", r_t[idx])
             # print(" max_Q_st_1_a[idx]: ", max_Q_st_1_a[idx])
@@ -179,8 +187,11 @@ class DQN():
         print("Update:  ", update)
         print("Q_st_at: ", Q_st_at)
         
-        mse_loss = nn.MSELoss()
-        loss = mse_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
+        
+        
+        # mse_loss = nn.MSELoss()
+        # loss = mse_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
+        loss = nn.functional.smooth_l1_loss(torch.tensor(update, requires_grad=True), torch.tensor(Q_st_at, requires_grad=True))
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -285,6 +296,7 @@ def perform_testing(env, model):
         
         while not terminal:
             action = action_selection(model.network, state, 0)
+            # print("Action: ", action)
             next_state, reward, terminal = env.step(action)
             state = np.squeeze(next_state)
             
