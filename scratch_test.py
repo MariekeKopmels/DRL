@@ -31,16 +31,16 @@ MIN_REPLAY_SIZE = 500
 
 BATCH_SIZE = 32
 
-LEARNING_RATE = 0.1 #alpha
+LEARNING_RATE = 5e-5 #alpha
 DISCOUNT_FACTOR = 0.99 #gamma
 
 NUM_ACTIONS = 3
 
 INITIAL_EXPLORATION_RATE = 1
 FINAL_EXPLORATION_RATE = 0.01
-DECAY_RATE = 0.001
+DECAY_RATE = int(1e4)
 
-NUMBER_OF_STEPS = 22000
+NUMBER_OF_STEPS = 55000
 NUMBER_OF_TESTING_EPOCHS = 10
 NUMBER_OF_OBSERVATION_EPOCHS = 32*11 #TODO: Waarop is deze 32 gebaseerd? *11 toch?
 
@@ -136,13 +136,28 @@ class CNN(nn.Module):
         
         super().__init__()
 
-        input = np.prod(env.state_shape())
+        # input = np.prod(env.state_shape())
+        # self.net = nn.Sequential(
+        #     nn.Linear(input, 64),
+        #     nn.Tanh(),
+        #     nn.Linear(64, env.get_num_actions())
+        # )
         self.net = nn.Sequential(
-            nn.Linear(input, 64),
-            nn.Tanh(),
-            nn.Linear(64, env.get_num_actions())
+            nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2,2), stride=(2,2)),
+            
+            nn.Conv2d(in_channels=16, out_channels=8, kernel_size=3),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2,2), stride=(2,2)),
+            
+            nn.Flatten(),
+            
+            nn.Linear(in_features=2888, out_features=32),
+            nn.ReLU(),
+            
+            nn.Linear(in_features=32, out_features=output_nodes)
         )
-        
         # # conv > relu > pool
         # self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3) 
         # self.relu1 = nn.ReLU()
@@ -160,30 +175,30 @@ class CNN(nn.Module):
         # # fc
         # self.fc2 = nn.Linear(in_features=32, out_features=output_nodes)
         
-    # def forward(self, input_state):
-        # print("Shape: ", input_state.shape)
-        # x = F.relu(self.conv1(input_state))
-        # x = F.max_pool2d(x, kernel_size=(2,2), stride=(2,2))
-        # # print("Shape: ", x.shape)
-        # x = F.relu(self.conv2(x))
-        # x = F.max_pool2d(x, kernel_size=(2,2), stride=(2,2))
-        # # print("Shape: ", x.shape)
-        # x = torch.flatten(x)
-        # # print("Shape: ", x.shape)
-        # x = F.relu(self.fc1(x))
-        # # print("Shape: ", x.shape)
-        # x = self.fc2(x)
+    # def forward(self, input):
+    #     print("Shape: ", input.shape)
+    #     input = np.transpose(input)
+    #     input = input.reshape((-1, input.shape[-1]))
+    #     input = np.transpose(input)
+    #     print("Shape: ", input.shape)
+    #     input = input.permute(0, 3, 1, 2)
+    #     input = F.relu(self.conv1(input))
+    #     input = F.max_pool2d(input, kernel_size=(2,2), stride=(2,2))
+    #     # print("Shape: ", x.shape)
+    #     input = F.relu(self.conv2(input))
+    #     input = F.max_pool2d(input, kernel_size=(2,2), stride=(2,2))
+    #     # print("Shape: ", x.shape)
+    #     input = torch.flatten(input)
+    #     # print("Shape: ", x.shape)
+    #     input = F.relu(self.fc1(input))
+    #     # print("Shape: ", x.shape)
+    #     input = self.fc2(input)
         
-        # return self.net(input_state)
+    #     return self.net(input)
 
     def forward(self, x):
         '''Reshape input and implemenet forward pass.'''
-        
-        # print("X.shape: ", x.shape)
-
-        x = np.transpose(x)
-        x = x.reshape((-1, x.shape[-1]))
-        x = np.transpose(x)
+        x = np.transpose(x, (0, 3, 1, 2))
         return self.net(x)
     
     
@@ -361,6 +376,8 @@ def perform_testing(env, model, epoch):
         total_reward = total_reward + reward
         
     state = env.reset()
+    
+    print(f"{epoch} epochs passed, winrate: {total_reward/NUMBER_OF_TESTING_EPOCHS}")
         
     return total_reward/NUMBER_OF_TESTING_EPOCHS
 
@@ -524,7 +541,6 @@ def perform_training(env, experience_replay, local, target, optimizer):
             target.load_state_dict(local.state_dict())
         
         if step % 110 == 0 and step != 0:
-            print("In epoch ", int(step/11))
             average_reward = perform_testing(env, local, int(step/11))
 
             # append the average reward over 10 testing runs
